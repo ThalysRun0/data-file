@@ -16,7 +16,8 @@ streamlit run app.py
 ```
 
 ### DONE
-* recall the pattern name after having loaded one
+* recall the pattern name after having loaded one, and saving also ^^
+* change action order in a circular buttons way
 #### helpers for actions
 * change dtype column in dataframe  
 * save dtype step details
