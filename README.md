@@ -5,13 +5,12 @@
 git clone \<me\>
 
 ```bash
+cd data-files
 python<version> -m venv data-files
 source data-files/bin/activate
 
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-
-cd data-files
 
 streamlit run app.py
 ```
