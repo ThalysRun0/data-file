@@ -15,10 +15,14 @@ python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-### TODO
+### DONE
 * recall the pattern name after having loaded one
 #### helpers for actions
 * change dtype column in dataframe  
+* save 
+
+### TODO
+#### helpers for actions
 * change column order  
 * rename column  
 * ...

@@ -5,15 +5,71 @@ import json
 import io
 import os, sys
 
-def simulate_action(source: pd.DataFrame):
-    try:
-        local_vars = {"df": source.copy()}
-        exec(transform_texte, {}, local_vars)
-        st.toast("Expression is valid", icon=":material/check:")
-        st.session_state.current_simu = local_vars["df"]
-    except Exception as e:
-        st.error(f"Error : {e}")
-        st.toast("Expression is invalid", icon=":material/dangerous:")
+if "pattern_name" not in st.session_state:
+    st.session_state.pattern_name = {}          # pattern name
+if "file_buffers" not in st.session_state:
+    st.session_state.file_buffers = {}          # raw content
+if "file_encoding" not in st.session_state:
+    st.session_state.file_encoding = {}         # encoding format
+if "file_format" not in st.session_state:
+    st.session_state.file_format = {}           # reader format
+if "dataframes" not in st.session_state:
+    st.session_state.dataframes = {}            # dataframe
+if "actions" not in st.session_state:
+    st.session_state.actions = {}               # transformations
+if "conversions" not in st.session_state:
+    st.session_state.conversions = {}           # column conversion
+if "current_file" not in st.session_state:
+    st.session_state.current_file = None
+if "current_simu" not in st.session_state:
+    st.session_state.current_simu = None
+if "transform_texte" not in st.session_state:
+    st.session_state.transform_texte = "df['A'] = df['A'] * 2"
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = str(random.randint(0, 100000))
+if "show_pattern_loader" not in st.session_state:
+    st.session_state.show_pattern_loader = False
+if "update_conv_type" not in st.session_state:
+    st.session_state.update_conv_type = ""
+
+available_types = ['int', 'float', 'str', 'bool', 'datetime']
+
+def modify_col_type(name):
+    st.session_state.update_conv_type = name
+
+def convert_type(name, type_str):
+    if type_str == 'int':
+        return f"df['{name}'] = pd.to_numeric(df['{name}'], errors='coerce').astype('Int64')"
+    elif type_str == 'float':
+        return f"df['{name}'] = pd.to_numeric(df['{name}'], errors='coerce')"
+    elif type_str == 'str':
+        return f"df['{name}'] = df['{name}'].astype(str)"
+    elif type_str == 'bool':
+        return f"df['{name}'] = df['{name}'].astype(bool)"
+    elif type_str == 'datetime':
+        return f"df['{name}'] = pd.to_datetime(df['{name}'], errors='coerce')"
+    else:
+        return ""
+
+def simulate_action(source: pd.DataFrame, action):
+    if action != "":
+        try:
+            local_vars = {"df": source.copy()}
+            exec(action, {}, local_vars)
+            st.toast("Expression is valid", icon=":material/check:")
+            st.session_state.current_simu = local_vars["df"]
+        except Exception as e:
+            st.error(f"Error : {e}")
+            st.toast("Expression is invalid", icon=":material/dangerous:")
+    else:
+        st.toast("Nothing to simulate", icon=":material/dangerous:")
+
+def add_action(action):
+    if action != "":
+        st.session_state.actions[file_name].append(action)
+        st.toast("Added to transformation list", icon=":material/info:")
+    else:
+        st.toast("Nothing to add", icon=":material/dangerous:")
 
 def save_pattern(pattern_name, file_name):
     params_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "params")
@@ -24,7 +80,9 @@ def save_pattern(pattern_name, file_name):
         tmp['file_encoding'] = st.session_state.file_encoding[file_name]
         tmp['file_format'] = st.session_state.file_format[file_name]
         tmp['actions'] = st.session_state.actions[file_name]
+        tmp['conversions'] = st.session_state.conversions[file_name]
         json.dump(tmp, f)
+    st.session_state.pattern_name[file_name] = pattern_name
     st.toast("Pattern has been saved", icon=":material/check:")
 
 def move_action(liste, index, direction=1):
@@ -64,28 +122,6 @@ def read_file(file_name, file_format, decoding_format) -> pd.DataFrame:
 
 st.set_page_config(layout="wide")
 
-if "file_buffers" not in st.session_state:
-    st.session_state.file_buffers = {}  # raw content
-if "file_encoding" not in st.session_state:
-    st.session_state.file_encoding = {}  # encoding format
-if "file_format" not in st.session_state:
-    st.session_state.file_format = {}  # reader format
-if "dataframes" not in st.session_state:
-    st.session_state.dataframes = {}    # dataframe
-if "actions" not in st.session_state:
-    st.session_state.actions = {}       # transformations
-if "current_file" not in st.session_state:
-    st.session_state.current_file = None
-if "current_simu" not in st.session_state:
-    st.session_state.current_simu = None
-if "transform_texte" not in st.session_state:
-    st.session_state.transform_texte = "df['A'] = df['A'] * 2"
-if "uploader_key" not in st.session_state:
-    st.session_state.uploader_key = str(random.randint(0, 100000))
-if "show_pattern_loader" not in st.session_state:
-    st.session_state.show_pattern_loader = False
-#st.session_state.show_pattern_loader = False
-
 with st.sidebar:
     uploaded_file = st.file_uploader(" ", type=["csv", "txt", "xlsx", "xls"], accept_multiple_files=False, key=st.session_state.uploader_key)
     if uploaded_file is not None:
@@ -93,6 +129,8 @@ with st.sidebar:
             content = uploaded_file.read()
             st.session_state.file_buffers[uploaded_file.name] = content
             st.session_state.actions[uploaded_file.name] = []
+            st.session_state.conversions[uploaded_file.name] = []
+            st.session_state.pattern_name[uploaded_file.name] = ""
             st.session_state.current_file = uploaded_file.name
             st.session_state.uploader_key = str(random.randint(0, 100000)) # make the upload as new widget on each upload
             st.session_state.current_simu = None
@@ -100,8 +138,8 @@ with st.sidebar:
 
     if st.session_state.file_buffers:
         st.title("📂 Uploaded Files")
-        col_del1, col_del2 = st.columns([1, 5], vertical_alignment="top")
         for file_key in list(st.session_state.file_buffers.keys()):
+            col_del1, col_del2 = st.columns([1, 5], vertical_alignment="top")
             with col_del1:
                 if st.button("", icon=":material/delete:", key=f"delete_{file_key}"):
                     st.session_state.file_buffers.pop(file_key, None)
@@ -109,6 +147,7 @@ with st.sidebar:
                     st.session_state.file_format.pop(file_key, None)
                     st.session_state.dataframes.pop(file_key, None)
                     st.session_state.actions.pop(file_key, None)
+                    st.session_state.conversions.pop(file_key, None)
                     st.session_state.current_file = None
                     st.rerun()
             with col_del2:
@@ -127,7 +166,7 @@ else:
 
     col_pat1, col_pat2, col_pat3 = st.columns([3, 1, 1], vertical_alignment="bottom")
     with col_pat1:
-        pattern_name = st.text_input("Read pattern name", value="any_naming_idea")
+        pattern_name = st.text_input("Read pattern name", value=st.session_state.pattern_name[file_name])
 
     with col_pat2:
         if st.button("Load existing read pattern", icon=":material/settings_backup_restore:"):
@@ -140,14 +179,17 @@ else:
                 st.session_state.file_encoding[file_name] = config['file_encoding']
                 st.session_state.file_format[file_name] = config['file_format']
                 st.session_state.actions[file_name] = config['actions']
+                st.session_state.conversions[file_name] = config['conversions']
+                st.session_state.pattern_name[file_name] = os.path.splitext(os.path.basename(uploaded_file.name))[0]
                 st.session_state.show_pattern_loader = False
                 st.toast("Pattern has been loaded", icon=":material/info:")
+                st.rerun()
 
     with col_pat3:
         st.button("Save current read pattern", icon=":material/save:", key="save_patter_top", on_click=save_pattern, args=[pattern_name, file_name])
 
     st.html("<hr>")
-    st.title(f"Selected file : `{file_name}`")
+    st.title(f"`{file_name}`")
     col1, col2, col3 = st.columns([1, 1, 1], vertical_alignment="bottom")
     with col1:
         tmp_encoding_value = "utf-8"
@@ -172,68 +214,126 @@ else:
             st.text(buffer.getvalue())
 
         with st.expander("Preview", expanded=True):
-            st.subheader("Dataframe preview :")
             st.dataframe(st.session_state.dataframes[file_name])
 
-        with st.expander("columns", expanded=True):
-            colonnes_selectionnees = st.multiselect(
-                "🔍 Select Columns to Use :",
+        with st.expander("Columns", expanded=True):
+            colonnes_to_convert = st.multiselect(
+                "🔍 Select columns",
                 options=st.session_state.dataframes[file_name].columns.tolist(),
                 default=[],
                 help="Type name or part to filter the columns"
             )
-            if colonnes_selectionnees:
-                if st.button("Add as a selection Action"):
+            if colonnes_to_convert:
+                if st.button("Add as Selection action", icon=":material/add_circle:"):
                     col_select = ""
-                    for col in colonnes_selectionnees:
+                    for col in colonnes_to_convert:
                         col_select.join(f"\"{col}\", ")
-                    update_simu_text(f"df=df[{colonnes_selectionnees}]")
+                    add_action(f"df=df[{colonnes_to_convert}]")
 
-        st.subheader("💡 Simulate a transformation action")
-        transform_texte = st.text_area("Code pandas (ex: df['A'] = df['A'] * 2)", help="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html", key=f"transform_texte")
+        with st.expander("Types", expanded=False):
+            colonnes_to_modify = st.selectbox("Select column", 
+                                            options=st.session_state.dataframes[file_name].columns.tolist(), 
+                                            help="Type name or part to filter the columns")
+            current_type = str(st.session_state.dataframes[file_name][colonnes_to_modify].dtype)
+            col_conv1, col_conv2 = st.columns([1, 3], vertical_alignment="bottom")
+            with col_conv1:
+                new_type = st.selectbox(
+                    f"{colonnes_to_modify} (actual type : {current_type})",
+                    options=available_types,
+                    index=available_types.index('str') if current_type not in available_types else available_types.index(current_type),
+                    key=f"add_conv_{colonnes_to_modify}",
+                )
+            with col_conv2:
+                if st.button("", icon=":material/add:", key=f"add_col_convert"):
+                    st.session_state.conversions[file_name].append({"name": colonnes_to_modify, 
+                                                                    "from": str(st.session_state.dataframes[file_name][colonnes_to_modify].dtype), 
+                                                                    "to": new_type,
+                                                                    "action": convert_type(colonnes_to_modify, new_type)})
+            if len(st.session_state.conversions[file_name]) > 0:
+                with st.container(border=True):
+                    for i, conv in enumerate(st.session_state.conversions[file_name]):
+                        col_convdyn1, col_convdyn2, col_convdyn3 = st.columns([1, 1, 4], vertical_alignment="bottom")
+                        with col_convdyn1:
+                            st.text(conv['name'])
+                        with col_convdyn2:
+                            new_type_dyn = st.selectbox(
+                                "unitary conversion",
+                                options=available_types,
+                                index=available_types.index('str') if conv['to'] not in available_types else available_types.index(conv['to']),
+                                key=f"update_conv_{i}_{colonnes_to_modify}",
+                                on_change=modify_col_type, args=[conv['name']],
+                                label_visibility='hidden'
+                            )
+                        with col_convdyn3:
+                            if st.button("", icon=":material/delete:", key=f"delete_convert_col_{i}"):
+                                st.session_state.conversions[file_name].pop(i)
+                                st.rerun()
 
-        col_simu1, col_simu2, col_simu3 = st.columns([1, 1, 1], vertical_alignment="center")
-        with col_simu1:
-            if st.button("Add as a new action", icon=":material/add:", key=f"add_{file_name}"):
-                st.session_state.actions[file_name].append(transform_texte)
-                st.toast("Added to transformation list", icon=":material/info:")
+                    if st.session_state.update_conv_type != "":
+                        if file_name in st.session_state.conversions:
+                            index = 0
+                            for i, conv in enumerate(st.session_state.conversions[file_name]):
+                                if st.session_state.update_conv_type in conv:
+                                    index = i
+                                    break
 
-        with col_simu2:
-            st.button("Simulate on source", icon=":material/stream:", key=f"simulate_{file_name}", on_click=simulate_action, args=[st.session_state.dataframes[file_name]])
+                            st.session_state.conversions[file_name][i]['to'] = new_type_dyn
+                            st.session_state.conversions[file_name][i]['action'] = convert_type(st.session_state.update_conv_type, new_type_dyn)
+                        st.session_state.update_conv_type = ""
+                        st.rerun()
 
-        with col_simu3:
-            if st.session_state.current_simu is not None:
-                st.button("Apply this step on current simulated data", icon=":material/texture_add:", key=f"apply_{file_name}", on_click=simulate_action, args=[st.session_state.current_simu])
+                    if len(st.session_state.conversions[file_name]) > 0:
+                        if st.button("Delete all", icon=":material/delete:", key=f"delete_convert"):
+                            st.session_state.conversions[file_name] = []
+                            st.rerun()
+                        if st.button("Add as Conversion action", icon=":material/add_circle:"):
+                            for conv in st.session_state.conversions[file_name]:
+                                add_action(conv['action'])
+                    #st.code(st.session_state.conversions[file_name])
 
-        if st.session_state.current_simu is not None:
-            st.dataframe(st.session_state.current_simu)
+        with st.expander("Actions", expanded=True):
+            for i, action in enumerate(st.session_state.actions[file_name]):
+                col_code1, col_code2, col_code3, col_code4, col_code5 = st.columns([1, 20, 1, 1, 1], vertical_alignment="center")
+                with col_code1:
+                    st.button(f"{i+1}", on_click=update_simu_text, args=[action])
+                with col_code2:
+                    st.code(f"{action}", language="python")
+                with col_code3:
+                    st.button("", icon=":material/arrow_upward:", key=f"up_action_{i}", on_click=move_action, args=[st.session_state.actions[file_name], i, -1])
+                with col_code4:
+                    st.button("", icon=":material/arrow_downward:", key=f"down_action_{i}", on_click=move_action, args=[st.session_state.actions[file_name], i, 1])
+                with col_code5:
+                    if st.button("", icon=":material/delete:", key=f"delete_{i}"):
+                        st.session_state.actions[file_name].pop(i)
+                        st.rerun()
 
-        st.subheader("📜 Transform action list")
-        for i, action in enumerate(st.session_state.actions[file_name]):
-            col_code1, col_code2, col_code3, col_code4, col_code5 = st.columns([1, 20, 1, 1, 1], vertical_alignment="center")
-            with col_code1:
-                st.button(f"{i+1}", on_click=update_simu_text, args=[action])
-            with col_code2:
-                st.code(f"{action}", language="python")
-            with col_code3:
-                st.button("", icon=":material/arrow_upward:", key=f"up_action_{i}", on_click=move_action, args=[st.session_state.actions[file_name], i, -1])
-            with col_code4:
-                st.button("", icon=":material/arrow_downward:", key=f"down_action_{i}", on_click=move_action, args=[st.session_state.actions[file_name], i, 1])
-            with col_code5:
-                if st.button("", icon=":material/delete:", key=f"delete_{i}"):
-                    st.session_state.actions[file_name].pop(i)
+            if st.button("Apply all actions on raw", icon=":material/texture_add:", key=f"run_{file_name}"):
+                df = read_file(file_name, file_format, decoding_format)
+                try:
+                    local_vars = {"df": df.copy()}
+                    for action in st.session_state.actions[file_name]:
+                        exec(action, {}, local_vars)
+                    st.session_state.current_simu = local_vars["df"]
                     st.rerun()
+                except Exception as e:
+                    st.error(f"Error : {e}")
 
-        if st.button("Apply all actions on raw", key=f"run_{file_name}"):
-            df = read_file(file_name, file_format, decoding_format)
-            try:
-                local_vars = {"df": df.copy()}
-                for action in st.session_state.actions[file_name]:
-                    exec(action, {}, local_vars)
-                st.session_state.dataframes[file_name] = local_vars["df"]
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error : {e}")
+        with st.expander("Simulate", expanded=True):
+            transform_texte = st.text_area("Pandas code (ex: df['A'] = df['A'] * 2)", help="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html", key=f"transform_texte")
+
+            col_simu1, col_simu2, col_simu3 = st.columns([1, 1, 1], vertical_alignment="center")
+            with col_simu1:
+                st.button("Add as new action", icon=":material/add_circle:", key=f"add_{file_name}", on_click=add_action, args=[transform_texte])
+
+            with col_simu2:
+                st.button("Simulate on source", icon=":material/stream:", key=f"simulate_{file_name}", on_click=simulate_action, args=[st.session_state.dataframes[file_name], transform_texte])
+
+            with col_simu3:
+                if st.session_state.current_simu is not None:
+                    st.button("Apply as next step on current simulated data", icon=":material/texture_add:", key=f"apply_{file_name}", on_click=simulate_action, args=[st.session_state.current_simu, transform_texte])
+
+            if st.session_state.current_simu is not None:
+                st.dataframe(st.session_state.current_simu)
 
         st.html("<hr>")
 
