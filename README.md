@@ -19,7 +19,7 @@ streamlit run app.py
 * recall the pattern name after having loaded one
 #### helpers for actions
 * change dtype column in dataframe  
-* save 
+* save dtype step details
 
 ### TODO
 #### helpers for actions
