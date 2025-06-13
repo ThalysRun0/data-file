@@ -1,0 +1,5 @@
+{"file_encoding": "iso-8859-1", "file_format": "txt", 
+"actions": [
+      "df[\"Matricule\"] = df[\"Matricule\"].str.replace(\"'\", \"\").fillna(0).astype(int).astype(str).str.pad(7, fillchar='0')"
+    , "df = df[['Matricule', 'Nom/Prenom']]"
+]}

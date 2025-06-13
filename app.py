@@ -3,7 +3,7 @@ import pandas as pd
 import random
 import json
 import io
-import os
+import os, sys
 
 def simulate_action(source: pd.DataFrame):
     try:
@@ -16,8 +16,10 @@ def simulate_action(source: pd.DataFrame):
         st.toast("Expression is invalid", icon=":material/dangerous:")
 
 def save_pattern(pattern_name, file_name):
-    print(os.path.dirname(__file__))
-    with open(f"{pattern_name}.json", "w") as f:
+    params_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "params")
+    if not os.path.exists(params_dir):
+        os.makedirs(params_dir)
+    with open(f"{params_dir}/{pattern_name}.json", "w") as f:
         tmp = {}
         tmp['file_encoding'] = st.session_state.file_encoding[file_name]
         tmp['file_format'] = st.session_state.file_format[file_name]
@@ -82,19 +84,20 @@ if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = str(random.randint(0, 100000))
 if "show_pattern_loader" not in st.session_state:
     st.session_state.show_pattern_loader = False
-
-uploaded_file = st.sidebar.file_uploader(" ", type=["csv", "txt", "xlsx", "xls"], accept_multiple_files=False, key=st.session_state.uploader_key)
-if uploaded_file is not None:
-    if uploaded_file.name not in st.session_state.file_buffers:
-        content = uploaded_file.read()
-        st.session_state.file_buffers[uploaded_file.name] = content
-        st.session_state.actions[uploaded_file.name] = []
-        st.session_state.current_file = uploaded_file.name
-        st.session_state.uploader_key = str(random.randint(0, 100000)) # make the upload as new widget on each upload
-        st.session_state.current_simu = None
-        st.rerun()
+#st.session_state.show_pattern_loader = False
 
 with st.sidebar:
+    uploaded_file = st.file_uploader(" ", type=["csv", "txt", "xlsx", "xls"], accept_multiple_files=False, key=st.session_state.uploader_key)
+    if uploaded_file is not None:
+        if uploaded_file.name not in st.session_state.file_buffers:
+            content = uploaded_file.read()
+            st.session_state.file_buffers[uploaded_file.name] = content
+            st.session_state.actions[uploaded_file.name] = []
+            st.session_state.current_file = uploaded_file.name
+            st.session_state.uploader_key = str(random.randint(0, 100000)) # make the upload as new widget on each upload
+            st.session_state.current_simu = None
+            st.rerun()
+
     if st.session_state.file_buffers:
         st.title("📂 Uploaded Files")
         col_del1, col_del2 = st.columns([1, 5], vertical_alignment="top")
@@ -113,7 +116,7 @@ with st.sidebar:
                     st.session_state.current_file = file_key
                     st.session_state.current_simu = None
     else:
-        st.warning("No file selected")
+        st.warning("No file imported")
         st.stop()
 
 if st.session_state.current_file is None:
@@ -121,9 +124,8 @@ if st.session_state.current_file is None:
     st.stop()
 else:
     file_name = st.session_state.current_file
-    st.title(f"Selected file : `{file_name}`")
-    col_pat1, col_pat2, col_pat3 = st.columns([3, 1, 1], vertical_alignment="bottom")
 
+    col_pat1, col_pat2, col_pat3 = st.columns([3, 1, 1], vertical_alignment="bottom")
     with col_pat1:
         pattern_name = st.text_input("Read pattern name", value="any_naming_idea")
 
@@ -144,6 +146,8 @@ else:
     with col_pat3:
         st.button("Save current read pattern", icon=":material/save:", key="save_patter_top", on_click=save_pattern, args=[pattern_name, file_name])
 
+    st.html("<hr>")
+    st.title(f"Selected file : `{file_name}`")
     col1, col2, col3 = st.columns([1, 1, 1], vertical_alignment="bottom")
     with col1:
         tmp_encoding_value = "utf-8"
@@ -186,7 +190,7 @@ else:
                     update_simu_text(f"df=df[{colonnes_selectionnees}]")
 
         st.subheader("💡 Simulate a transformation action")
-        transform_texte = st.text_area("Code pandas (ex: df['A'] = df['A'] * 2)", help="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.htmlw", key=f"transform_texte")
+        transform_texte = st.text_area("Code pandas (ex: df['A'] = df['A'] * 2)", help="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html", key=f"transform_texte")
 
         col_simu1, col_simu2, col_simu3 = st.columns([1, 1, 1], vertical_alignment="center")
         with col_simu1:
