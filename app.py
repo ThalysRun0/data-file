@@ -1,24 +1,27 @@
 import streamlit as st
 import pandas as pd
+import chardet
 import random
 import json
 import io
 import os, sys
 
 if "pattern_name" not in st.session_state:
-    st.session_state.pattern_name = {}          # pattern name
+    st.session_state.pattern_name = {}              # pattern name
 if "file_buffers" not in st.session_state:
-    st.session_state.file_buffers = {}          # raw content
+    st.session_state.file_buffers = {}              # raw content
+if "file_detected_encoding" not in st.session_state:
+    st.session_state.file_detected_encoding = {}    # encoding format
 if "file_encoding" not in st.session_state:
-    st.session_state.file_encoding = {}         # encoding format
+    st.session_state.file_encoding = {}             # encoding format
 if "file_format" not in st.session_state:
-    st.session_state.file_format = {}           # reader format
+    st.session_state.file_format = {}               # reader format
 if "dataframes" not in st.session_state:
-    st.session_state.dataframes = {}            # dataframe
+    st.session_state.dataframes = {}                # dataframe
 if "actions" not in st.session_state:
-    st.session_state.actions = {}               # transformations
+    st.session_state.actions = {}                   # transformations
 if "conversions" not in st.session_state:
-    st.session_state.conversions = {}           # column conversion
+    st.session_state.conversions = {}               # column conversion
 if "current_file" not in st.session_state:
     st.session_state.current_file = None
 if "current_simu" not in st.session_state:
@@ -77,6 +80,7 @@ def save_pattern(pattern_name, file_name):
         os.makedirs(params_dir)
     with open(f"{params_dir}/{pattern_name}.json", "w") as f:
         tmp = {}
+        tmp['file_detected_encoding'] = st.session_state.file_detected_encoding[file_name]
         tmp['file_encoding'] = st.session_state.file_encoding[file_name]
         tmp['file_format'] = st.session_state.file_format[file_name]
         tmp['actions'] = st.session_state.actions[file_name]
@@ -94,15 +98,15 @@ def move_action(liste, index, direction=1):
 def update_simu_text(action):
     st.session_state.transform_texte = action
 
-def read_file(file_name, file_format, decoding_format) -> pd.DataFrame:
+def read_file(file_name, file_format, decoding_format, sep=",") -> pd.DataFrame:
     df = None
     if file_name in st.session_state.file_buffers:
         file_bytes = st.session_state.file_buffers[file_name]
         try:
             if file_format == "csv":
-                df = pd.read_csv(io.BytesIO(file_bytes), encoding=decoding_format)
+                df = pd.read_csv(io.BytesIO(file_bytes), encoding=decoding_format, sep=sep)
             elif file_format == "txt":
-                df = pd.read_csv(io.BytesIO(file_bytes), delimiter="\t", encoding=decoding_format)
+                df = pd.read_csv(io.BytesIO(file_bytes), delimiter="\t", encoding=decoding_format, sep=sep)
             elif file_format == "json":
                 df = pd.read_json(io.BytesIO(file_bytes), encoding=decoding_format)
             elif file_format == "excel":
@@ -127,6 +131,9 @@ with st.sidebar:
     if uploaded_file is not None:
         if uploaded_file.name not in st.session_state.file_buffers:
             content = uploaded_file.read()
+            detected_encoding = chardet.detect(content).get("encoding")
+            st.session_state.file_detected_encoding[uploaded_file.name] = detected_encoding
+            st.session_state.file_encoding[uploaded_file.name] = detected_encoding
             st.session_state.file_buffers[uploaded_file.name] = content
             st.session_state.actions[uploaded_file.name] = []
             st.session_state.conversions[uploaded_file.name] = []
@@ -143,6 +150,7 @@ with st.sidebar:
             with col_del1:
                 if st.button("", icon=":material/delete:", key=f"delete_{file_key}"):
                     st.session_state.file_buffers.pop(file_key, None)
+                    st.session_state.file_detected_encoding.pop(file_key, None)
                     st.session_state.file_encoding.pop(file_key, None)
                     st.session_state.file_format.pop(file_key, None)
                     st.session_state.dataframes.pop(file_key, None)
@@ -151,9 +159,15 @@ with st.sidebar:
                     st.session_state.current_file = None
                     st.rerun()
             with col_del2:
-                if st.button(file_key, key=file_key):
+                if st.button(file_key, key=file_key, help=f"Detected encoding: {st.session_state.file_detected_encoding[file_key]}"):
                     st.session_state.current_file = file_key
                     st.session_state.current_simu = None
+            tmp_icon = ":material/warning:" if st.session_state.file_encoding[file_key] != st.session_state.file_detected_encoding[file_key] else ":material/check:"
+            tmp_color = "orange" if st.session_state.file_encoding[file_key] != st.session_state.file_detected_encoding[file_key] else "green"
+            st.badge(st.session_state.file_encoding[file_key] if st.session_state.file_encoding[file_key] == st.session_state.file_detected_encoding[file_key] else st.session_state.file_detected_encoding[file_key]
+                , icon=tmp_icon
+                , color=tmp_color)
+
     else:
         st.warning("No file imported")
         st.stop()
@@ -176,6 +190,7 @@ else:
             uploaded_file = st.file_uploader("Choose read pattern file", type="json")
             if uploaded_file is not None:
                 config = json.load(uploaded_file)
+                
                 st.session_state.file_encoding[file_name] = config['file_encoding']
                 st.session_state.file_format[file_name] = config['file_format']
                 st.session_state.actions[file_name] = config['actions']
@@ -190,22 +205,32 @@ else:
 
     st.html("<hr>")
     st.title(f"`{file_name}`")
-    col1, col2, col3 = st.columns([1, 1, 1], vertical_alignment="bottom")
-    with col1:
-        tmp_encoding_value = "utf-8"
-        if file_name is not None:
-            if file_name in st.session_state.file_encoding:
-                tmp_encoding_value = st.session_state.file_encoding[file_name]
-        decoding_format = st.text_input("encoding", value=tmp_encoding_value)
-    with col2:
-        file_format_available = ["csv", "txt", "json", "excel"]
-        tmp_file_format_value = "csv"
-        if file_name is not None:
-            if file_name in st.session_state.file_format:
-                tmp_file_format_value = st.session_state.file_format[file_name]
-        file_format = st.selectbox("format", file_format_available, index=file_format_available.index(tmp_file_format_value))
-    with col3:
-        st.button("Apply read parameters", icon=":material/read_more:", on_click=read_file, args=[file_name, file_format, decoding_format])
+    with st.expander("Read parameters", expanded=True):
+        col1, col2, col3 = st.columns([1, 1, 1], vertical_alignment="bottom")
+        with col1:
+            tmp_encoding_value = "utf-8"
+            if file_name is not None:
+                if file_name in st.session_state.file_encoding:
+                    tmp_encoding_value = st.session_state.file_encoding[file_name]
+            decoding_format = st.text_input("encoding", value=tmp_encoding_value)
+        with col2:
+            file_format_available = ["csv", "txt", "json", "excel"]
+            tmp_file_format_value = "csv"
+            if file_name is not None:
+                if file_name in st.session_state.file_format:
+                    tmp_file_format_value = st.session_state.file_format[file_name]
+            file_format = st.selectbox("format", file_format_available, index=file_format_available.index(tmp_file_format_value))
+        with col3:
+            pass
+        st.html("<hr>")
+        sep = ","
+        if file_format == "csv":
+            st.markdown("CSV options")
+            sep = st.text_input("Separator", value=",", help="Character used to separate values in the CSV file")
+#            header = st.selectbox("Header", options=["infer", "0", "1", "2"], index=0, help="Row number to use as the column names")
+#            if header != "infer":
+#                header = int(header)
+        st.button("Apply read parameters", icon=":material/read_more:", on_click=read_file, args=[file_name, file_format, decoding_format, sep])
 
     if file_name in st.session_state.dataframes:
         with st.expander("infos", expanded=False):
