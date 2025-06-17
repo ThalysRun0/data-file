@@ -16,6 +16,8 @@ if "file_encoding" not in st.session_state:
     st.session_state.file_encoding = {}             # encoding format
 if "file_format" not in st.session_state:
     st.session_state.file_format = {}               # reader format
+if "file_format_options" not in st.session_state:
+    st.session_state.file_format_options = {}       # options format
 if "dataframes" not in st.session_state:
     st.session_state.dataframes = {}                # dataframe
 if "actions" not in st.session_state:
@@ -58,7 +60,7 @@ def simulate_action(source: pd.DataFrame, action):
     if action != "":
         try:
             local_vars = {"df": source.copy()}
-            exec(action, {}, local_vars)
+            exec("import pandas as pd; " + action, {}, local_vars)
             st.toast("Expression is valid", icon=":material/check:")
             st.session_state.current_simu = local_vars["df"]
         except Exception as e:
@@ -83,6 +85,7 @@ def save_pattern(pattern_name, file_name):
         tmp['file_detected_encoding'] = st.session_state.file_detected_encoding[file_name]
         tmp['file_encoding'] = st.session_state.file_encoding[file_name]
         tmp['file_format'] = st.session_state.file_format[file_name]
+        tmp['file_format_options'] = st.session_state.file_format_options[file_name]
         tmp['actions'] = st.session_state.actions[file_name]
         tmp['conversions'] = st.session_state.conversions[file_name]
         json.dump(tmp, f)
@@ -124,6 +127,12 @@ def read_file(file_name, file_format, decoding_format, sep=",") -> pd.DataFrame:
             return None
     return df
 
+def get_encoding(content):
+    return chardet.detect(content).get("encoding", "utf-8")
+
+def apply_encoding(content):
+    st.session_state.file_encoding[file_name] = get_encoding(content)
+
 st.set_page_config(layout="wide")
 
 with st.sidebar:
@@ -131,7 +140,8 @@ with st.sidebar:
     if uploaded_file is not None:
         if uploaded_file.name not in st.session_state.file_buffers:
             content = uploaded_file.read()
-            detected_encoding = chardet.detect(content).get("encoding")
+            detected_encoding = get_encoding(content)
+            detected_encoding = "utf-8" if None == detected_encoding else detected_encoding
             st.session_state.file_detected_encoding[uploaded_file.name] = detected_encoding
             st.session_state.file_encoding[uploaded_file.name] = detected_encoding
             st.session_state.file_buffers[uploaded_file.name] = content
@@ -153,6 +163,7 @@ with st.sidebar:
                     st.session_state.file_detected_encoding.pop(file_key, None)
                     st.session_state.file_encoding.pop(file_key, None)
                     st.session_state.file_format.pop(file_key, None)
+                    st.session_state.file_format_options.pop(file_key, None)
                     st.session_state.dataframes.pop(file_key, None)
                     st.session_state.actions.pop(file_key, None)
                     st.session_state.conversions.pop(file_key, None)
@@ -190,9 +201,10 @@ else:
             uploaded_file = st.file_uploader("Choose read pattern file", type="json")
             if uploaded_file is not None:
                 config = json.load(uploaded_file)
-                
+                st.session_state.file_detected_encoding[file_name] = config['file_detected_encoding']
                 st.session_state.file_encoding[file_name] = config['file_encoding']
                 st.session_state.file_format[file_name] = config['file_format']
+                st.session_state.file_format_options[file_name] = config['file_format_options']
                 st.session_state.actions[file_name] = config['actions']
                 st.session_state.conversions[file_name] = config['conversions']
                 st.session_state.pattern_name[file_name] = os.path.splitext(os.path.basename(uploaded_file.name))[0]
@@ -204,9 +216,13 @@ else:
         st.button("Save current read pattern", icon=":material/save:", key="save_patter_top", on_click=save_pattern, args=[pattern_name, file_name])
 
     st.html("<hr>")
-    st.title(f"`{file_name}`")
+    col_read1, col_read2 = st.columns([1, 10], vertical_alignment="bottom")
+    with col_read1:
+        st.button("", icon=":material/autorenew:", key="detect_encoding", on_click=apply_encoding, args=[st.session_state.file_buffers[file_name]], help="Detect encoding of the file")
+    with col_read2:
+        st.title(f"`{file_name}`")
     with st.expander("Read parameters", expanded=True):
-        col1, col2, col3 = st.columns([1, 1, 1], vertical_alignment="bottom")
+        col1, col2 = st.columns([1, 1], vertical_alignment="bottom")
         with col1:
             tmp_encoding_value = "utf-8"
             if file_name is not None:
@@ -220,16 +236,11 @@ else:
                 if file_name in st.session_state.file_format:
                     tmp_file_format_value = st.session_state.file_format[file_name]
             file_format = st.selectbox("format", file_format_available, index=file_format_available.index(tmp_file_format_value))
-        with col3:
-            pass
+
         st.html("<hr>")
         sep = ","
         if file_format == "csv":
-            st.markdown("CSV options")
             sep = st.text_input("Separator", value=",", help="Character used to separate values in the CSV file")
-#            header = st.selectbox("Header", options=["infer", "0", "1", "2"], index=0, help="Row number to use as the column names")
-#            if header != "infer":
-#                header = int(header)
         st.button("Apply read parameters", icon=":material/read_more:", on_click=read_file, args=[file_name, file_format, decoding_format, sep])
 
     if file_name in st.session_state.dataframes:
