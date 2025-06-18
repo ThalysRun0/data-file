@@ -26,5 +26,6 @@ streamlit run app.py
 #### helpers for actions
 * change column order  
 * rename column  
+* add button to export (without pandas dataframe:index )
 * ...
 

@@ -29,7 +29,7 @@ if "current_file" not in st.session_state:
 if "current_simu" not in st.session_state:
     st.session_state.current_simu = None
 if "transform_texte" not in st.session_state:
-    st.session_state.transform_texte = "df['A'] = df['A'] * 2"
+    st.session_state.transform_texte = ""
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = str(random.randint(0, 100000))
 if "show_pattern_loader" not in st.session_state:
@@ -101,19 +101,17 @@ def move_action(liste, index, direction=1):
 def update_simu_text(action):
     st.session_state.transform_texte = action
 
-def read_file(file_name, file_format, decoding_format, sep=",") -> pd.DataFrame:
+def read_file(file_name, file_format, decoding_format, options) -> pd.DataFrame:
     df = None
     if file_name in st.session_state.file_buffers:
         file_bytes = st.session_state.file_buffers[file_name]
         try:
             if file_format == "csv":
-                df = pd.read_csv(io.BytesIO(file_bytes), encoding=decoding_format, sep=sep)
-            elif file_format == "txt":
-                df = pd.read_csv(io.BytesIO(file_bytes), delimiter="\t", encoding=decoding_format, sep=sep)
-            elif file_format == "json":
-                df = pd.read_json(io.BytesIO(file_bytes), encoding=decoding_format)
+                df = pd.read_csv(io.BytesIO(file_bytes), encoding=decoding_format, sep=options['csv']['sep'])
+#            elif file_format == "json":
+#                df = pd.read_json(io.BytesIO(file_bytes), encoding=decoding_format)
             elif file_format == "excel":
-                df = pd.read_excel(io.BytesIO(file_bytes), engine='xlrd')
+                df = pd.read_excel(io.BytesIO(file_bytes), engine='xlrd', skiprows=options['excel']['header'])
             else:
                 st.error("Unsupported format")
                 return None
@@ -131,12 +129,12 @@ def get_encoding(content):
     return chardet.detect(content).get("encoding", "utf-8")
 
 def apply_encoding(content):
-    st.session_state.file_encoding[file_name] = get_encoding(content)
+    st.session_state.file_encoding[file_name] = get_encoding(content) or "utf-8"
 
 st.set_page_config(layout="wide")
 
 with st.sidebar:
-    uploaded_file = st.file_uploader(" ", type=["csv", "txt", "xlsx", "xls"], accept_multiple_files=False, key=st.session_state.uploader_key)
+    uploaded_file = st.file_uploader(" ", accept_multiple_files=False, key=st.session_state.uploader_key)
     if uploaded_file is not None:
         if uploaded_file.name not in st.session_state.file_buffers:
             content = uploaded_file.read()
@@ -173,11 +171,6 @@ with st.sidebar:
                 if st.button(file_key, key=file_key, help=f"Detected encoding: {st.session_state.file_detected_encoding[file_key]}"):
                     st.session_state.current_file = file_key
                     st.session_state.current_simu = None
-            tmp_icon = ":material/warning:" if st.session_state.file_encoding[file_key] != st.session_state.file_detected_encoding[file_key] else ":material/check:"
-            tmp_color = "orange" if st.session_state.file_encoding[file_key] != st.session_state.file_detected_encoding[file_key] else "green"
-            st.badge(st.session_state.file_encoding[file_key] if st.session_state.file_encoding[file_key] == st.session_state.file_detected_encoding[file_key] else st.session_state.file_detected_encoding[file_key]
-                , icon=tmp_icon
-                , color=tmp_color)
 
     else:
         st.warning("No file imported")
@@ -201,13 +194,19 @@ else:
             uploaded_file = st.file_uploader("Choose read pattern file", type="json")
             if uploaded_file is not None:
                 config = json.load(uploaded_file)
-                st.session_state.file_detected_encoding[file_name] = config['file_detected_encoding']
-                st.session_state.file_encoding[file_name] = config['file_encoding']
-                st.session_state.file_format[file_name] = config['file_format']
-                st.session_state.file_format_options[file_name] = config['file_format_options']
-                st.session_state.actions[file_name] = config['actions']
-                st.session_state.conversions[file_name] = config['conversions']
-                st.session_state.pattern_name[file_name] = os.path.splitext(os.path.basename(uploaded_file.name))[0]
+                if "file_detected_encoding" in config:
+                    st.session_state.file_detected_encoding[file_name] = config['file_detected_encoding'] or "utf-8"
+                if "file_encoding" in config:
+                    st.session_state.file_encoding[file_name] = config['file_encoding'] or "utf-8"
+                if "file_format" in config:
+                    st.session_state.file_format[file_name] = config['file_format'] or "csv"
+                if "file_format_options" in config:
+                    st.session_state.file_format_options[file_name] = config['file_format_options'] or {"sep": ","}
+                if "actions" in config:
+                    st.session_state.actions[file_name] = config['actions'] or []
+                if "conversions" in config:
+                    st.session_state.conversions[file_name] = config['conversions'] or []
+                st.session_state.pattern_name[file_name] = os.path.splitext(os.path.basename(uploaded_file.name))[0] or "default"
                 st.session_state.show_pattern_loader = False
                 st.toast("Pattern has been loaded", icon=":material/info:")
                 st.rerun()
@@ -216,21 +215,26 @@ else:
         st.button("Save current read pattern", icon=":material/save:", key="save_patter_top", on_click=save_pattern, args=[pattern_name, file_name])
 
     st.html("<hr>")
-    col_read1, col_read2 = st.columns([1, 10], vertical_alignment="bottom")
-    with col_read1:
-        st.button("", icon=":material/autorenew:", key="detect_encoding", on_click=apply_encoding, args=[st.session_state.file_buffers[file_name]], help="Detect encoding of the file")
-    with col_read2:
-        st.title(f"`{file_name}`")
+    st.title(f"`{file_name}`")
     with st.expander("Read parameters", expanded=True):
-        col1, col2 = st.columns([1, 1], vertical_alignment="bottom")
-        with col1:
+        col_read1, col_read2, col_read3, col_read4 = st.columns([1, 3, 1, 5], vertical_alignment="bottom")
+        with col_read1:
+            st.button("", icon=":material/autorenew:", key="detect_encoding", on_click=apply_encoding, args=[st.session_state.file_buffers[file_name]], help="Detect encoding of file")
+        with col_read2:
             tmp_encoding_value = "utf-8"
             if file_name is not None:
                 if file_name in st.session_state.file_encoding:
                     tmp_encoding_value = st.session_state.file_encoding[file_name]
             decoding_format = st.text_input("encoding", value=tmp_encoding_value)
-        with col2:
-            file_format_available = ["csv", "txt", "json", "excel"]
+        with col_read3:
+            tmp_icon = ":material/warning:" if st.session_state.file_encoding[file_key] != st.session_state.file_detected_encoding[file_key] else ":material/check:"
+            tmp_color = "orange" if st.session_state.file_encoding[file_key] != st.session_state.file_detected_encoding[file_key] else "green"
+            st.badge("" if st.session_state.file_encoding[file_key] == st.session_state.file_detected_encoding[file_key] else st.session_state.file_encoding[file_key] or "utf-8"
+                , icon=tmp_icon
+                , color=tmp_color)
+
+        with col_read4:
+            file_format_available = ["csv", "excel"]
             tmp_file_format_value = "csv"
             if file_name is not None:
                 if file_name in st.session_state.file_format:
@@ -238,10 +242,13 @@ else:
             file_format = st.selectbox("format", file_format_available, index=file_format_available.index(tmp_file_format_value))
 
         st.html("<hr>")
-        sep = ","
         if file_format == "csv":
-            sep = st.text_input("Separator", value=",", help="Character used to separate values in the CSV file")
-        st.button("Apply read parameters", icon=":material/read_more:", on_click=read_file, args=[file_name, file_format, decoding_format, sep])
+            sep = st.text_input("Separator", value=",", help="Character used to separate values in CSV file, can be escaped with '\\\\'")
+            st.session_state.file_format_options[file_name] = {"csv": {"sep": sep}}
+        if file_format == "excel":
+            header = st.text_input("Header", value="1", help="Header line number, used as : how many lines to skip before data begins")
+            st.session_state.file_format_options[file_name] = {"excel": {"header": header}}
+        st.button("Apply read parameters", icon=":material/read_more:", on_click=read_file, args=[file_name, file_format, decoding_format, st.session_state.file_format_options[file_name]])
 
     if file_name in st.session_state.dataframes:
         with st.expander("infos", expanded=False):
@@ -344,15 +351,13 @@ else:
                         st.rerun()
 
             if st.button("Apply all actions on raw", icon=":material/texture_add:", key=f"run_{file_name}"):
-                df = read_file(file_name, file_format, decoding_format)
+                df = read_file(file_name, file_format, decoding_format, st.session_state.file_format_options[file_name])
                 try:
-                    local_vars = {"df": df.copy()}
                     for action in st.session_state.actions[file_name]:
-                        exec(action, {}, local_vars)
-                    st.session_state.current_simu = local_vars["df"]
-                    st.rerun()
+                        simulate_action(df, action)
                 except Exception as e:
                     st.error(f"Error : {e}")
+                st.rerun()
 
         with st.expander("Simulate", expanded=True):
             transform_texte = st.text_area("Pandas code (ex: df['A'] = df['A'] * 2)", help="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html", key=f"transform_texte")
