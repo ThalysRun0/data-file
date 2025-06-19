@@ -385,4 +385,6 @@ else:
             with col_exp2:
                 st.button("Save current read pattern", icon=":material/save:", key="save_pattern_bottom", on_click=save_pattern, args=[pattern_name, file_name])
             with col_exp3:
-                st.button("Export DataFrame as CSV", icon=":material/file_download:", key=f"export_{pattern_name}", on_click=lambda: st.session_state.dataframes[file_name].to_csv(f"{pattern_name}.csv", index=False))
+#                st.button("Export DataFrame as CSV", icon=":material/file_download:", key=f"export_{pattern_name}", on_click=lambda: st.session_state.dataframes[file_name].to_csv(f"{pattern_name}.csv", index=False))
+                st.button("Export DataFrame as Excel", icon=":material/file_download:", key=f"export_{pattern_name}", on_click=lambda: 
+                          st.session_state.current_simu.to_excel(pd.ExcelWriter(f"{pattern_name}.xlsx", engine="odf"), index=False))
