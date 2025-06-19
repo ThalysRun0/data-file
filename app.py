@@ -362,7 +362,7 @@ else:
         with st.expander("Simulate", expanded=True):
             transform_texte = st.text_area("Pandas code (ex: df['A'] = df['A'] * 2)", help="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html", key=f"transform_texte")
 
-            col_simu1, col_simu2, col_simu3 = st.columns([1, 1, 1], vertical_alignment="center")
+            col_simu1, col_simu2, col_simu3 = st.columns([1, 1, 2], vertical_alignment="center")
             with col_simu1:
                 st.button("Add as new action", icon=":material/add_circle:", key=f"add_{file_name}", on_click=add_action, args=[transform_texte])
 

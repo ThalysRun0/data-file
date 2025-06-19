@@ -18,6 +18,7 @@ streamlit run app.py
 ### DONE
 * recall the pattern name after having loaded one, and saving also ^^
 * change action order in a circular buttons way
+* add button to export (without pandas dataframe:index )
 #### helpers for actions
 * change dtype column in dataframe  
 * save dtype step details
@@ -26,6 +27,5 @@ streamlit run app.py
 #### helpers for actions
 * change column order  
 * rename column  
-* add button to export (without pandas dataframe:index )
 * ...
 
