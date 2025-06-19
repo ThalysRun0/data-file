@@ -182,11 +182,11 @@ if st.session_state.current_file is None:
 else:
     file_name = st.session_state.current_file
 
-    col_pat1, col_pat2, col_pat3 = st.columns([3, 1, 1], vertical_alignment="bottom")
+    col_pat1, col_pat2, col_pat3 = st.columns([3, 2, 2], vertical_alignment="bottom")
     with col_pat1:
-        pattern_name = st.text_input("Read pattern name", value=st.session_state.pattern_name[file_name])
+        pattern_name = st.text_input("Read pattern name", key="pattern_name_top", value=st.session_state.pattern_name[file_name], on_change=lambda: st.session_state.pattern_name.update({file_name: st.session_state.pattern_name_top}))
 
-    with col_pat2:
+    with col_pat3:
         if st.button("Load existing read pattern", icon=":material/settings_backup_restore:"):
             st.session_state.show_pattern_loader = True
 
@@ -210,9 +210,9 @@ else:
                 st.session_state.show_pattern_loader = False
                 st.toast("Pattern has been loaded", icon=":material/info:")
                 st.rerun()
-
-    with col_pat3:
-        st.button("Save current read pattern", icon=":material/save:", key="save_patter_top", on_click=save_pattern, args=[pattern_name, file_name])
+    if pattern_name != "":
+        with col_pat2:
+            st.button("Save current read pattern", icon=":material/save:", key="save_pattern_top", on_click=save_pattern, args=[pattern_name, file_name])
 
     st.html("<hr>")
     st.title(f"`{file_name}`")
@@ -378,4 +378,11 @@ else:
 
         st.html("<hr>")
 
-        st.button("Save current read pattern", icon=":material/save:", key="save_patter_bottom", on_click=save_pattern, args=[pattern_name, file_name])
+        col_exp1, col_exp2, col_exp3 = st.columns([3, 2, 2], vertical_alignment="bottom")
+        with col_exp1:
+            pattern_name = st.text_input("Read pattern name", key="pattern_name_bottom", value=st.session_state.pattern_name[file_name], on_change=lambda: st.session_state.pattern_name.update({file_name: st.session_state.pattern_name_bottom}))
+        if pattern_name != "":
+            with col_exp2:
+                st.button("Save current read pattern", icon=":material/save:", key="save_pattern_bottom", on_click=save_pattern, args=[pattern_name, file_name])
+            with col_exp3:
+                st.button("Export DataFrame as CSV", icon=":material/file_download:", key=f"export_{pattern_name}", on_click=lambda: st.session_state.dataframes[file_name].to_csv(f"{pattern_name}.csv", index=False))
