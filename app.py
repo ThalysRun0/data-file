@@ -4,7 +4,7 @@ import chardet
 import random
 import json
 import io
-import os, sys
+import os, sys, odf
 
 if "pattern_name" not in st.session_state:
     st.session_state.pattern_name = {}              # pattern name
@@ -101,6 +101,16 @@ def move_action(liste, index, direction=1):
 def update_simu_text(action):
     st.session_state.transform_texte = action
 
+def export_simu(df, pattern_name):
+    if df is not None:
+        file_name = f"{pattern_name}.xlsx"
+        writer = pd.ExcelWriter(file_name, engine="openpyxl", mode='aw')
+        df.to_excel(writer, index=False)
+        writer.save()
+        st.toast(f"DataFrame has been exported to {file_name}", icon=":material/check:")
+    else:
+        st.error("No DataFrame to export")
+
 def read_file(file_name, file_format, decoding_format, options) -> pd.DataFrame:
     df = None
     if file_name in st.session_state.file_buffers:
@@ -143,6 +153,8 @@ with st.sidebar:
             st.session_state.file_detected_encoding[uploaded_file.name] = detected_encoding
             st.session_state.file_encoding[uploaded_file.name] = detected_encoding
             st.session_state.file_buffers[uploaded_file.name] = content
+            st.session_state.file_format_options[uploaded_file.name] = "csv"
+            st.session_state.file_format_options[uploaded_file.name] = {"csv": {"sep": ","}}
             st.session_state.actions[uploaded_file.name] = []
             st.session_state.conversions[uploaded_file.name] = []
             st.session_state.pattern_name[uploaded_file.name] = ""
@@ -201,7 +213,7 @@ else:
                 if "file_format" in config:
                     st.session_state.file_format[file_name] = config['file_format'] or "csv"
                 if "file_format_options" in config:
-                    st.session_state.file_format_options[file_name] = config['file_format_options'] or {"sep": ","}
+                    st.session_state.file_format_options[file_name] = config['file_format_options'] or {"csv": {"sep": ","}}
                 if "actions" in config:
                     st.session_state.actions[file_name] = config['actions'] or []
                 if "conversions" in config:
@@ -243,11 +255,11 @@ else:
 
         st.html("<hr>")
         if file_format == "csv":
-            sep = st.text_input("Separator", value=",", help="Character used to separate values in CSV file, can be escaped with '\\\\'")
-            st.session_state.file_format_options[file_name] = {"csv": {"sep": sep}}
+            sep = st.text_input("Separator", value=st.session_state.file_format_options[file_name][file_format]['sep'], help="Character used to separate values in CSV file, can be escaped with '\\\\'")
+            st.session_state.file_format_options[file_name] = {file_format: {"sep": sep}}
         if file_format == "excel":
-            header = st.text_input("Header", value="1", help="Header line number, used as : how many lines to skip before data begins")
-            st.session_state.file_format_options[file_name] = {"excel": {"header": header}}
+            header = st.text_input("Header", value=st.session_state.file_format_options[file_name][file_format]['header'], help="Header line number, used as : how many lines to skip before data begins")
+            st.session_state.file_format_options[file_name] = {file_format: {"header": header}}
         st.button("Apply read parameters", icon=":material/read_more:", on_click=read_file, args=[file_name, file_format, decoding_format, st.session_state.file_format_options[file_name]])
 
     if file_name in st.session_state.dataframes:
@@ -386,5 +398,4 @@ else:
                 st.button("Save current read pattern", icon=":material/save:", key="save_pattern_bottom", on_click=save_pattern, args=[pattern_name, file_name])
             with col_exp3:
 #                st.button("Export DataFrame as CSV", icon=":material/file_download:", key=f"export_{pattern_name}", on_click=lambda: st.session_state.dataframes[file_name].to_csv(f"{pattern_name}.csv", index=False))
-                st.button("Export DataFrame as Excel", icon=":material/file_download:", key=f"export_{pattern_name}", on_click=lambda: 
-                          st.session_state.current_simu.to_excel(pd.ExcelWriter(f"{pattern_name}.xlsx", engine="odf"), index=False))
+                st.button("Export DataFrame as Excel", icon=":material/file_download:", key=f"export_{pattern_name}", on_click=export_simu, args=[st.session_state.current_simu, pattern_name])
