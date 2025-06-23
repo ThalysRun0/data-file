@@ -25,7 +25,10 @@ streamlit run app.py
 
 ### TODO
 #### helpers for actions
+* many read cases/engine are available for excel files, each has it own behavior, this is really annoying  
 * change column order  
 * rename column  
-* ...
-
+* ...  
+a new warning in console :  
+Warning: The DataFrame has column names of mixed type. They will be converted to strings and not roundtrip correctly.  
+  table = pa.Table.from_pandas(df)  
