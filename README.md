@@ -28,6 +28,7 @@ streamlit run app.py
 * many read cases/engine are available for excel files, each has it own behavior, this is really annoying  
 * change column order  
 * rename column  
+* improve export/download behavior with cache if possible  
 * ...  
 a new warning in console :  
 Warning: The DataFrame has column names of mixed type. They will be converted to strings and not roundtrip correctly.  

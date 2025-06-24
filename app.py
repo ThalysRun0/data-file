@@ -127,26 +127,24 @@ def move_action(liste, index, direction=1):
 def update_simu_text(action):
     st.session_state.transform_texte = action
 
+##@st.cache_data
+#def get_data(local_file_key):
+#    simulate_all_actions(local_file_key)
+#    return st.session_state.current_simu.copy()
+#
 #@st.cache_data
-def get_data(local_file_key):
-    simulate_all_actions(local_file_key)
-    return st.session_state.current_simu.copy()
-
-@st.cache_data
-def convert_for_download(df: pd.DataFrame, filename) -> bytes:
-    output = BytesIO()
-    writer = pd.ExcelWriter(output, engine='xlsxwriter')
-    df.to_excel(writer, index=False)
-#    writer.save()
-    processed_data = output.getvalue()
-    return processed_data
+#def convert_for_download(df: pd.DataFrame, filename) -> bytes:
+#    output = BytesIO()
+#    writer = pd.ExcelWriter(output, engine='xlsxwriter')
+#    df.to_excel(writer, index=False)
+##    writer.save()
+#    processed_data = output.getvalue()
+#    return processed_data
 
 def export_simu(df: pd.DataFrame, pattern_name, local_file_key):
     if df is not None:
         file_path = os.path.join(st.session_state.external_path[local_file_key], f"{pattern_name}.xlsx")
-        #writer = pd.ExcelWriter(file_path, engine="xlsxwriter", mode='w')
         df.to_excel(file_path, index=False)
-        #writer.save()
         st.toast(f"DataFrame has been exported to {file_path}", icon=":material/check:")
     else:
         st.error("No DataFrame to export")
@@ -161,7 +159,7 @@ def read_file(local_file_key, file_format, decoding_format, options) -> pd.DataF
 #            elif file_format == "json":
 #                df = pd.read_json(io.BytesIO(file_bytes), encoding=decoding_format)
             elif file_format == "excel":
-                df = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')#, header=options['excel']['header'])
+                df = pd.read_excel(io.BytesIO(file_bytes), engine=options['excel']['engine'], skiprows=options['excel']['header'])
             else:
                 st.error("Unsupported format")
                 return None
@@ -299,13 +297,17 @@ else:
 
         st.html("<hr>")
         if file_format == "csv":
-            sep = ","
+            tmp_sep = st.session_state.file_format_options[file_key][file_format]['sep'] if file_format in st.session_state.file_format_options[file_key] else ","
+            sep = st.text_input("Separator", value=tmp_sep, help="Character used to separate values in CSV file, can be escaped with '\\\\'")
             st.session_state.file_format_options[file_key] = {file_format: {"sep": sep}}
-            sep = st.text_input("Separator", value=st.session_state.file_format_options[file_key][file_format]['sep'], help="Character used to separate values in CSV file, can be escaped with '\\\\'")
+
         if file_format == "excel":
-            header = 1
-            st.session_state.file_format_options[file_key] = {file_format: {"header": header}}
-            header = st.text_input("Header", value=st.session_state.file_format_options[file_key][file_format]['header'], help="Header line number, used as : how many lines to skip before data begins")
+            tmp_header = st.session_state.file_format_options[file_key][file_format]['header'] if file_format in st.session_state.file_format_options[file_key] else 1
+            tmp_engine = st.session_state.file_format_options[file_key][file_format]['engine'] if file_format in st.session_state.file_format_options[file_key] else "xlrd"
+            engine_available = ["xlrd", "openpyxl", "odf", "pyxlsb", "calamine"]
+            header = st.text_input("Header", value=tmp_header, help="Header line number, used as : how many lines to skip before data begins")
+            engine = st.selectbox("format", engine_available, index=engine_available.index(tmp_engine))
+            st.session_state.file_format_options[file_key] = {file_format: {"engine": engine, "header": header}}
             
         st.button("Apply read parameters", icon=":material/read_more:", on_click=read_file, args=[file_key, file_format, decoding_format, st.session_state.file_format_options[file_key]])
 
@@ -396,7 +398,8 @@ else:
             for i, action in enumerate(st.session_state.actions[file_key]):
                 col_code1, col_code2, col_code3, col_code4, col_code5 = st.columns([1, 20, 1, 1, 1], vertical_alignment="center")
                 with col_code1:
-                    st.button(f"{i+1}", on_click=update_simu_text, args=[action])
+                    if st.button(f"{i+1}", on_click=update_simu_text, args=[action]):
+                        st.rerun()
                 with col_code2:
                     st.code(f"{action}", language="python")
                 with col_code3:
@@ -410,27 +413,20 @@ else:
 
             if st.button("Apply all actions on raw", icon=":material/texture_add:", key=f"run_{file_key}", on_click=simulate_all_actions, args=[file_key]):
                 st.rerun()
-#                df = read_file(file_key, file_format, decoding_format, st.session_state.file_format_options[file_key])
-#                try:
-#                    for action in st.session_state.actions[file_key]:
-#                        simulate_action(df, action)
-#                except Exception as e:
-#                    st.error(f"Error : {e}")
-#                st.rerun()
 
         with st.expander("Simulate", expanded=True):
-            transform_texte = st.text_area("Pandas code (ex: df['A'] = df['A'] * 2)", help="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html", key=f"transform_texte")
+            transform_texte = st.text_area("Pandas code (ex: df['A'] = df['A'] * 2)", help="https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html", key=f"transform_texte", value=st.session_state.transform_texte)
 
             col_simu1, col_simu2, col_simu3 = st.columns([1, 1, 2], vertical_alignment="center")
             with col_simu1:
-                st.button("Add as new action", icon=":material/add_circle:", key=f"add_{file_key}", on_click=add_action, args=[transform_texte, file_key])
+                st.button("Add as new action", icon=":material/add_circle:", key=f"add_{file_key}", on_click=add_action, args=[st.session_state.transform_texte, file_key])
 
             with col_simu2:
-                st.button("Simulate on source", icon=":material/stream:", key=f"simulate_{file_key}", on_click=simulate_action, args=[st.session_state.dataframes[file_key], transform_texte])
+                st.button("Simulate on source", icon=":material/stream:", key=f"simulate_{file_key}", on_click=simulate_action, args=[st.session_state.dataframes[file_key], st.session_state.transform_texte])
 
             with col_simu3:
                 if st.session_state.current_simu is not None:
-                    st.button("Apply as next step on current simulated data", icon=":material/texture_add:", key=f"apply_{file_key}", on_click=simulate_action, args=[st.session_state.current_simu, transform_texte])
+                    st.button("Apply as next step on current simulated data", icon=":material/texture_add:", key=f"apply_{file_key}", on_click=simulate_action, args=[st.session_state.current_simu, st.session_state.transform_texte])
 
             if st.session_state.current_simu is not None:
                 st.dataframe(st.session_state.current_simu)
@@ -446,6 +442,6 @@ else:
             with col_exp3:
                 if st.session_state.current_simu is not None:
                     st.text_input("export folder", key="export_folder", value=st.session_state.external_path[file_key], on_change=lambda: st.session_state.external_path.update({file_key: st.session_state.export_folder}))
-                    st.button("Export current simulated DataFrame", icon=":material/file_download:", key=f"export_{pattern_name}", on_click=export_simu, args=[st.session_state.current_simu, pattern_name, file_key])
+                    st.button("Export current simulated DataFrame", help="Export is new Excel format (xlsx)", icon=":material/file_download:", key=f"export_{pattern_name}", on_click=export_simu, args=[st.session_state.current_simu, pattern_name, file_key])
 #                    st.button("Export DataFrame as CSV", icon=":material/file_download:", key=f"export_{pattern_name}", on_click=lambda: st.session_state.dataframes[file_key].to_csv(f"{pattern_name}.csv", index=False))
 #                    st.download_button("Export DataFrame as Excel", data=convert_for_download(get_data(file_key), f"{pattern_name}.xlsx"), mime="application/octet-stream", icon=":material/file_download:", file_key=f"{pattern_name}.xlsx", key=f"export_{pattern_name}")
